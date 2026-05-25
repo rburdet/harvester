@@ -1,0 +1,52 @@
+repos:
+  - your-org/your-repo
+
+harvest:
+  project_id: 0000000           # see: harvester list-projects
+  task_id: 0000000              # see: harvester list-tasks <project_id>
+
+branding:
+  account_name: Your Company    # top-right wordmark on the Clients Report PDF
+                                # (omit to auto-read from Harvest /company)
+
+hours:
+  min_per_day: 1
+  max_per_day: 8
+  fill_no_commit_days: weekdays # weekdays | all | none — carry forward from previous logged day
+  default_when_unclear: 6
+
+tickets:
+  # Regex to extract ticket IDs from commit messages and branch names.
+  # Matches must be captured in group 1.
+  patterns:
+    - '([A-Z][A-Z0-9]+-\d+)'    # JIRA-style: ABC-123
+    - '#(\d+)'                  # GH-style: #123
+  fallback: 'misc'              # used as a single bullet when a day has commits but no ticket ids
+
+invoice:
+  # Most recently generated invoice (the anchor for auto-numbering). New invoices
+  # bump the number by +1 per month from this point.
+  latest_invoice_number: 1
+  latest_invoice_month: 2026-01  # YYYY-MM that the number above was issued for
+  vendor:
+    name: Your Name
+    title: Your Title
+  bill_to:
+    name: Acme Corp
+    address_lines:
+      - 123 Main St
+      - City, ST 00000
+      - Country
+    email: billing@acme.example
+  line_items:
+    - description: Software Development
+      qty: 1
+      unit_price: 1000          # flat monthly amount
+  currency: "$"
+
+google_form:
+  url: https://docs.google.com/forms/d/e/REPLACE/formResponse
+  fields:
+    month: entry.0000000
+    total_hours: entry.0000001
+    notes: entry.0000002
