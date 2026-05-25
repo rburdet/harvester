@@ -12,7 +12,6 @@ from rich.console import Console
 
 from . import aggregate as agg
 from . import commits as commits_mod
-from . import gform
 from . import invoice as invoice_mod
 from . import pdf as pdf_mod
 from . import review
@@ -169,19 +168,11 @@ def invoice_cmd(month: str, number: int | None, config_path: str):
     print(f"wrote {out}  (#{meta.number}, dated {meta.invoice_date.isoformat()})")
 
 
-@cli.command("inspect-form")
-@click.argument("url")
-def inspect_form_cmd(url: str):
-    for f in gform.inspect(url):
-        print(f"{f.entry_id:25s}  ({f.type}) {f.label}")
-
-
 @cli.command("run")
 @click.option("--month", required=True, help="YYYY-MM")
 @click.option("--config", "config_path", default="config.yaml", show_default=True)
 @click.option("--dry-run", is_flag=True, help="Show table, write nothing.")
 @click.option("--skip-harvest", is_flag=True)
-@click.option("--skip-form", is_flag=True)
 @click.option("--yes", is_flag=True, help="Skip the y/n/edit prompt.")
 @click.option("--only-day", "only_day", default=None, help="Limit to a single YYYY-MM-DD entry (testing).")
 def run_cmd(
@@ -189,7 +180,6 @@ def run_cmd(
     config_path: str,
     dry_run: bool,
     skip_harvest: bool,
-    skip_form: bool,
     yes: bool,
     only_day: str | None,
 ):
@@ -317,26 +307,6 @@ def run_cmd(
                 console.print(f"  [red]failed[/red] {e.day}: {exc}")
         console.print(f"Harvest: {posted} posted, {skipped} skipped")
 
-    # google form
-    if not skip_form:
-        form_cfg = cfg.get("google_form") or {}
-        url = form_cfg.get("url")
-        fields = form_cfg.get("fields") or {}
-        if not url or "REPLACE" in url or not fields:
-            console.print("[dim]google_form not configured; skipping form submit[/dim]")
-            return
-        values = {}
-        if "month" in fields:
-            values[fields["month"]] = label
-        if "total_hours" in fields:
-            values[fields["total_hours"]] = f"{sum(e.hours for e in entries):.2f}"
-        if "notes" in fields:
-            values[fields["notes"]] = _form_notes(entries)
-        ok = gform.submit(url, values)
-        console.print(
-            "[green]form submitted[/green]" if ok else "[red]form submit failed; submit manually[/red]"
-        )
-
 
 def _resolve_names(client, project_id: int, task_id: int) -> tuple[str, str, str]:
     """Return (project_name, task_name, client_name) by scanning project_assignments."""
@@ -349,15 +319,6 @@ def _resolve_names(client, project_id: int, task_id: int) -> tuple[str, str, str
                     break
             return pa["project"]["name"], task_name, pa["client"]["name"]
     return "", "", ""
-
-
-def _form_notes(entries) -> str:
-    tickets: list[str] = []
-    for e in entries:
-        for t in e.tickets:
-            if t not in tickets:
-                tickets.append(t)
-    return "\n".join(f"- {t}" for t in tickets)
 
 
 if __name__ == "__main__":

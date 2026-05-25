@@ -43,10 +43,3 @@ invoice:
       qty: 1
       unit_price: 1000          # flat monthly amount
   currency: "$"
-
-google_form:
-  url: https://docs.google.com/forms/d/e/REPLACE/formResponse
-  fields:
-    month: entry.0000000
-    total_hours: entry.0000001
-    notes: entry.0000002
