@@ -164,7 +164,7 @@ def invoice_cmd(month: str, number: int | None, config_path: str):
         raise click.ClickException("config.yaml missing an 'invoice:' section")
     year, mon = (int(p) for p in month.split("-"))
     meta = _build_invoice_meta(inv, year, mon, number_override=number)
-    out = invoice_mod.write_invoice(meta, ROOT / "out")
+    out = invoice_mod.write_invoice(meta, ROOT / "out" / month)
     print(f"wrote {out}  (#{meta.number}, dated {meta.invoice_date.isoformat()})")
 
 
@@ -227,9 +227,11 @@ def run_cmd(
 
     # Invoice is config-driven (independent of entries), so generate it even on
     # --dry-run. Skip silently if `invoice:` isn't configured.
+    out_dir = ROOT / "out" / label
+
     if inv_cfg := cfg.get("invoice"):
         inv_meta = _build_invoice_meta(inv_cfg, year, mon)
-        inv_path = invoice_mod.write_invoice(inv_meta, ROOT / "out")
+        inv_path = invoice_mod.write_invoice(inv_meta, out_dir)
         console.print(
             f"  wrote {inv_path}  (#{inv_meta.number}, "
             f"dated {inv_meta.invoice_date.isoformat()})"
@@ -267,15 +269,15 @@ def run_cmd(
         account=account_name,
     )
 
-    # spreadsheet + pdf
-    xlsx, csvp = spreadsheet.write(entries, ROOT / "out", label)
+    # spreadsheet + pdf (all under out/<month>/)
+    xlsx, csvp = spreadsheet.write(entries, out_dir, label)
     console.print(f"  wrote {xlsx}")
     console.print(f"  wrote {csvp}")
-    pdf_path = pdf_mod.write(entries, ROOT / "out", label, meta=meta)
+    pdf_path = pdf_mod.write(entries, out_dir, label, meta=meta)
     console.print(f"  wrote {pdf_path}")
     from datetime import date as _date
     clients_pdf = pdf_mod.write_clients_report(
-        entries, ROOT / "out",
+        entries, out_dir,
         _date(year, mon, 1), _date(year, mon, last_day),
         meta=meta,
     )
