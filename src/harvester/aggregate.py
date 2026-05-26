@@ -19,11 +19,10 @@ class DayEntry:
 
     @property
     def notes(self) -> str:
-        bullets = "\n".join(f"- {t}" for t in self.tickets) if self.tickets else ""
-        if self.carried_from:
-            header = f"(continued from {self.carried_from.isoformat()})"
-            return f"{header}\n{bullets}".strip()
-        return bullets
+        # Just the ticket bullets — no "(continued from …)" header. The
+        # carry-forward provenance is visible locally (review table, PDF) but
+        # we don't want it leaking into the Harvest entry's notes field.
+        return "\n".join(f"- {t}" for t in self.tickets) if self.tickets else ""
 
 
 def extract_tickets(text: str, patterns: list[str]) -> list[str]:
@@ -43,6 +42,42 @@ def extract_tickets(text: str, patterns: list[str]) -> list[str]:
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _apply_transition_heuristic(
+    ticketed: dict[date, "DayEntry"],
+) -> dict[date, "DayEntry"]:
+    """When a ticketed day introduces a ticket the previous ticketed day didn't
+    have, treat it as a transition: prepend the previous day's original tickets,
+    on the assumption that the switch happened mid-day (you finished one ticket
+    and started the next on the same day, but only the new one shows in commits).
+
+    Uses a snapshot of original tickets to avoid cascading across multiple
+    transitions (a third-day switch shouldn't drag in tickets from two days ago).
+    """
+    days = sorted(ticketed)
+    if len(days) < 2:
+        return dict(ticketed)
+    original = {d: list(ticketed[d].tickets) for d in days}
+    out: dict[date, DayEntry] = {days[0]: ticketed[days[0]]}
+    for i in range(1, len(days)):
+        d = days[i]
+        prev_tickets = original[days[i - 1]]
+        cur_tickets = original[d]
+        introduces_new = any(t not in prev_tickets for t in cur_tickets)
+        if not introduces_new:
+            out[d] = ticketed[d]
+            continue
+        merged: list[str] = list(prev_tickets)
+        for t in cur_tickets:
+            if t not in merged:
+                merged.append(t)
+        cur = ticketed[d]
+        out[d] = DayEntry(
+            day=cur.day, hours=cur.hours, tickets=merged,
+            carried_from=cur.carried_from, commit_count=cur.commit_count,
+        )
+    return out
 
 
 def _days_in_month(year: int, month: int) -> list[date]:
@@ -91,8 +126,22 @@ def build_entries(
         hours = _clamp(span_h, min_hours, max_hours)
         tickets: list[str] = []
         for c in day_commits:
-            blob = c.message + ("\n" + c.branch if c.branch else "")
-            for t in extract_tickets(blob, ticket_patterns):
+            # Per-commit ticket source precedence:
+            #   1. If the commit is on the default branch (squash-merge or
+            #      direct push), prefer the message *subject line* — it carries
+            #      the original PR title with the right ticket id, even when
+            #      this same SHA happens to also live on a later feature branch
+            #      whose name says something different.
+            #   2. Otherwise fall back to the branch name.
+            # We never read the commit body — that's where cross-references
+            # hide ("fixes CP-x, related to CP-y") and they'd pollute the day.
+            found: list[str] = []
+            if c.on_default_branch and c.message:
+                subject = c.message.split("\n", 1)[0]
+                found = extract_tickets(subject, ticket_patterns)
+            if not found and c.branch:
+                found = extract_tickets(c.branch, ticket_patterns)
+            for t in found:
                 if t not in tickets:
                     tickets.append(t)
         if tickets:
@@ -103,8 +152,14 @@ def build_entries(
     if not ticketed:
         return []
 
+    # Augmented ticketed dict (transition days carry both old + new tickets).
+    # We use this only for the visible row on actual ticketed days. Carry-forward
+    # still reads `ticketed` (the originals) so the merged tickets don't
+    # propagate to days *after* the switch.
+    ticketed_aug = _apply_transition_heuristic(ticketed)
+
     if fill == "none":
-        return [ticketed[d] for d in sorted(ticketed)]
+        return [ticketed_aug[d] for d in sorted(ticketed_aug)]
 
     earliest = min(ticketed)
     earliest_entry = ticketed[earliest]
@@ -115,9 +170,10 @@ def build_entries(
         if fill == "weekdays" and d.weekday() >= 5:
             continue
         if d in ticketed:
-            result.append(ticketed[d])
+            result.append(ticketed_aug[d])
             continue
         # Find the most recent ticketed day <= d; if none, backfill from earliest.
+        # Use original (non-augmented) tickets so transitions don't bleed forward.
         prior = [k for k in sorted_ticketed_days if k < d]
         src = ticketed[prior[-1]] if prior else earliest_entry
         result.append(

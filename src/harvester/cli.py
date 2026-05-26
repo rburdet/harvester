@@ -193,9 +193,12 @@ def run_cmd(
     console = Console()
     console.print(f"[bold]Fetching commits[/bold] for {label} as {author}…")
     commits = commits_mod.fetch_month(
-        cfg["repos"], author, year, mon, tz, fetch_branches=True
+        cfg["repos"], author, year, mon, tz, console=console
     )
-    console.print(f"  found {len(commits)} commits across {len(cfg['repos'])} repo(s)")
+    console.print(
+        f"[bold]Found {len(commits)} commit(s)[/bold] "
+        f"across {len(cfg['repos'])} repo(s)"
+    )
 
     entries = agg.build_entries(
         commits,

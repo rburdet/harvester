@@ -43,7 +43,7 @@ def prompt_confirm(entries: list[DayEntry], assume_yes: bool) -> list[DayEntry]:
     console = Console()
     while True:
         choice = console.input(
-            "[bold]Submit to Harvest?[/bold] [y]es / [n]o / [e]dit: "
+            "[bold]Submit to Harvest?[/bold] \\[y]es / \\[n]o / \\[e]dit: "
         ).strip().lower()
         if choice in ("y", "yes"):
             return entries
